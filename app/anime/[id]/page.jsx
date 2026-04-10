@@ -2,6 +2,8 @@ import { getAnimeDetails } from '@/services/jikanApi';
 import Link from 'next/link';
 import BackButton from '@/components/BackButton';
 import FavoriteButton from '@/components/FavoriteButton';
+import EpisodeCheck from '@/components/EpisodeCheck'; // <-- Importado Paso B
+
 export const runtime = 'edge';
 
 export async function generateMetadata({ params }) {
@@ -144,14 +146,22 @@ export default async function AnimeDetailsPage({ params }) {
                 <div className="text-3xl font-black text-gray-700 group-hover:text-pink-500 transition-colors w-14 text-center">
                   {ep.mal_id}
                 </div>
-                <div className="flex-1 border-l border-gray-700 pl-4">
-                  <h3 className="text-sm font-bold text-gray-200 line-clamp-1 group-hover:text-white transition-colors">
-                    {ep.title}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] bg-pink-600/20 text-pink-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Sub Español</span>
+                
+                {/* Contenedor de Info con Check de Visto */}
+                <div className="flex-1 border-l border-gray-700 pl-4 flex items-center justify-between">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-sm font-bold text-gray-200 line-clamp-1 group-hover:text-white transition-colors">
+                      {ep.title}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] bg-pink-600/20 text-pink-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Sub Español</span>
+                    </div>
                   </div>
+
+                  {/* AQUÍ SE MUESTRA EL CHECK SI YA LO VIO */}
+                  <EpisodeCheck episodeId={`${id}-episodio-${ep.mal_id}`} />
                 </div>
+
                 <div className="w-10 h-10 rounded-full bg-pink-600/10 flex items-center justify-center group-hover:bg-pink-600 transition-colors">
                   <span className="text-pink-500 group-hover:text-white text-sm">▶</span>
                 </div>
