@@ -2,6 +2,7 @@ import { getAnimeDetails } from '@/services/jikanApi';
 import Link from 'next/link';
 import BackButton from '@/components/BackButton';
 import FavoriteButton from '@/components/FavoriteButton';
+export const runtime = 'edge';
 
 export async function generateMetadata({ params }) {
   const resolvedParams = await params;
