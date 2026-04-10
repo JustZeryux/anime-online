@@ -47,7 +47,8 @@ export default async function EpisodePage({ params }) {
           epNum={epNum.toString()} 
         />
 
-        <VideoPlayer servers={servers} />
+        {/* Tienes que mandarle jikanId y nextEp para que el botón sepa a dónde ir */}
+<VideoPlayer servers={servers} jikanId={jikanId} nextEp={nextEp} />
 
         {/* CONTROLES DE NAVEGACIÓN */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
