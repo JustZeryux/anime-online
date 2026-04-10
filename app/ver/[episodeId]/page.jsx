@@ -4,6 +4,7 @@ import VideoPlayer from '@/components/VideoPlayer';
 import Link from 'next/link';
 import HistoryTracker from '@/components/HistoryTracker';
 import DisqusComments from '@/components/DisqusComments';
+export const runtime = 'edge';
 
 export default async function EpisodePage({ params }) {
   const resolvedParams = await params;
