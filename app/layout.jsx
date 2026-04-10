@@ -4,6 +4,7 @@ import Navbar from '@/components/Navbar';
 export const metadata = {
   title: 'AnimeOnline - Ver Anime Online HD',
   description: 'Motor de búsqueda y visualización de anime en alta calidad.',
+  manifest: '/manifest.json', // <-
 };
 
 export default function RootLayout({ children }) {
