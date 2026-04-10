@@ -18,6 +18,9 @@ const getServerName = (id) => {
 export default function VideoPlayer({ servers, jikanId, nextEp }) {
   const [activeLanguage, setActiveLanguage] = useState('');
   const [activeServer, setActiveServer] = useState(null);
+  
+  // Estado para controlar si el temporizador del final ya terminó
+  const [showNextTimer, setShowNextTimer] = useState(false);
 
   const availableLanguages = servers ? Object.keys(servers).filter(lang => servers[lang] && servers[lang].length > 0) : [];
 
@@ -35,6 +38,24 @@ export default function VideoPlayer({ servers, jikanId, nextEp }) {
     }
   }, [activeLanguage, servers]);
 
+  // TEMPORIZADOR INTELIGENTE (Aparece el botón al final del capítulo)
+  useEffect(() => {
+    // Si cambiamos de servidor o de episodio, ocultamos el botón de nuevo
+    setShowNextTimer(false);
+
+    if (activeServer && nextEp) {
+      // 22 minutos = 1,320,000 milisegundos.
+      // OJO: Si quieres probarlo rápido para ver si funciona, 
+      // cambia el número 1320000 por 5000 (para que salga a los 5 segundos).
+      const timer = setTimeout(() => {
+        setShowNextTimer(true);
+      }, 1320000); 
+
+      // Limpiamos el temporizador si el usuario sale de la página
+      return () => clearTimeout(timer);
+    }
+  }, [activeServer, nextEp]);
+
   if (!servers || availableLanguages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 bg-[#111] rounded-xl border border-gray-800 text-gray-500">
@@ -47,8 +68,9 @@ export default function VideoPlayer({ servers, jikanId, nextEp }) {
   return (
     <div className="flex flex-col gap-4">
       
-      {/* REPRODUCTOR LIMPIO (Dejamos que el iframe haga su trabajo nativo) */}
-      <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-800">
+      {/* EL REPRODUCTOR */}
+      <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-800 group">
+        
         {activeServer ? (
           <iframe
             src={activeServer.url}
@@ -64,19 +86,22 @@ export default function VideoPlayer({ servers, jikanId, nextEp }) {
             <p>Cargando reproductor...</p>
           </div>
         )}
-      </div>
 
-      {/* BARRA ESTILO CRUNCHYROLL (Siguiente Episodio) */}
-      {nextEp && (
-        <div className="flex justify-end -mt-2">
-           <Link 
-            href={`/ver/${jikanId}-episodio-${nextEp}`} 
-            className="bg-gray-800 hover:bg-pink-600 text-white px-5 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-lg border border-gray-700 hover:border-pink-500"
-          >
-            Siguiente Episodio <span className="text-lg">⏭️</span>
-          </Link>
-        </div>
-      )}
+        {/* OVERLAY TIPO CRUNCHYROLL: Botón flotante dentro del video */}
+        {nextEp && activeServer && (
+          <div className={`absolute bottom-16 right-4 z-50 transition-opacity duration-500 pointer-events-none ${
+            showNextTimer ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}>
+            {/* El botón recupera los clics con pointer-events-auto */}
+            <Link 
+              href={`/ver/${jikanId}-episodio-${nextEp}`} 
+              className="pointer-events-auto bg-black/70 backdrop-blur-md hover:bg-white hover:text-black text-white px-4 py-2 rounded font-bold text-sm flex items-center gap-2 border border-white/20 transition-all shadow-lg"
+            >
+              Siguiente <span className="text-lg">⏭️</span>
+            </Link>
+          </div>
+        )}
+      </div>
 
       {/* SELECTOR DE IDIOMAS Y SERVIDORES */}
       <div className="bg-[#1c1b22] rounded-xl border border-gray-800 p-4">
