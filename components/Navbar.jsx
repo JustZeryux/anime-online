@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AuthButton from './AuthButton';
+import InstallPWA from './InstallPWA'; // <-- NUEVA IMPORTACIÓN
 
 export default function Navbar() {
   const [query, setQuery] = useState('');
@@ -40,15 +41,20 @@ export default function Navbar() {
 
         {/* ENLACES Y LOGIN DESKTOP */}
         <div className="hidden md:flex items-center gap-6 shrink-0">
-          <Link href="/mi-lista" className="text-sm font-semibold text-gray-300 hover:text-pink-500">Mi Lista</Link>
-          <Link href="/historial" className="text-sm font-semibold text-gray-300 hover:text-pink-500">Historial</Link>
+          <Link href="/mi-lista" className="text-sm font-semibold text-gray-300 hover:text-pink-500 transition-colors">Mi Lista</Link>
+          <Link href="/historial" className="text-sm font-semibold text-gray-300 hover:text-pink-500 transition-colors">Historial</Link>
+          
           <div className="w-px h-6 bg-gray-800"></div>
+
+          {/* BOTÓN DE INSTALACIÓN (DESKTOP) */}
+          <InstallPWA />
+
           <AuthButton />
         </div>
 
         {/* BOTÓN HAMBURGUESA MÓVIL */}
         <button 
-          className="md:hidden text-white text-2xl z-50"
+          className="md:hidden text-white text-2xl z-50 p-2"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
         >
           {isMenuOpen ? '✖' : '☰'}
@@ -57,7 +63,9 @@ export default function Navbar() {
 
       {/* MENÚ MÓVIL DESPLEGABLE */}
       {isMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 w-full bg-[#151419] border-b border-gray-800 p-4 flex flex-col gap-4 shadow-2xl animate-fade-in">
+        <div className="md:hidden absolute top-full left-0 w-full bg-[#151419] border-b border-gray-800 p-4 flex flex-col gap-4 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          
+          {/* BUSCADOR MÓVIL */}
           <form onSubmit={handleSearch} className="relative w-full">
             <input
               type="text"
@@ -67,11 +75,30 @@ export default function Navbar() {
               className="w-full bg-gray-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 border border-gray-700"
             />
           </form>
-          <div className="flex flex-col gap-3 mt-2 border-t border-gray-800 pt-4">
-            <Link href="/mi-lista" onClick={() => setIsMenuOpen(false)} className="text-gray-300 hover:text-pink-500 font-bold p-2 bg-gray-800/50 rounded-lg">❤️ Mi Lista</Link>
-            <Link href="/historial" onClick={() => setIsMenuOpen(false)} className="text-gray-300 hover:text-pink-500 font-bold p-2 bg-gray-800/50 rounded-lg">▶ Historial</Link>
+
+          {/* BOTÓN DE INSTALACIÓN (MÓVIL) - Centrado y llamativo */}
+          <div className="flex justify-center py-2">
+            <InstallPWA />
           </div>
-          <div className="mt-4 flex justify-center">
+
+          <div className="flex flex-col gap-3 mt-2 border-t border-gray-800 pt-4">
+            <Link 
+              href="/mi-lista" 
+              onClick={() => setIsMenuOpen(false)} 
+              className="text-gray-300 hover:text-pink-500 font-bold p-3 bg-gray-800/50 rounded-lg flex items-center gap-3"
+            >
+              ❤️ Mi Lista
+            </Link>
+            <Link 
+              href="/historial" 
+              onClick={() => setIsMenuOpen(false)} 
+              className="text-gray-300 hover:text-pink-500 font-bold p-3 bg-gray-800/50 rounded-lg flex items-center gap-3"
+            >
+              ▶ Historial
+            </Link>
+          </div>
+
+          <div className="mt-4 flex justify-center border-t border-gray-800 pt-6 pb-2">
             <AuthButton />
           </div>
         </div>
