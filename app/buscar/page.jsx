@@ -1,5 +1,6 @@
 import { searchAnime } from '@/services/jikanApi';
 import Link from 'next/link';
+export const runtime = 'edge';
 
 export default async function SearchPage({ searchParams }) {
   const resolvedParams = await searchParams;
