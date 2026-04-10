@@ -44,16 +44,6 @@ export default function Home() {
         >
           🗓️ Próximamente
         </button>
-        <button 
-          onClick={() => setActiveTab('nsfw')}
-          className={`px-6 py-2 rounded-full font-bold transition-all shadow-lg ${
-            activeTab === 'nsfw' 
-              ? 'bg-red-600 text-white shadow-red-500/30' 
-              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-          }`}
-        >
-          🔞 NSFW
-        </button>
       </div>
 
       {/* AQUÍ ESTÁ LA SOLUCIÓN:
