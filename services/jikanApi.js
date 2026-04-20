@@ -26,22 +26,7 @@ const KNOWN_LATINO_DUBS = new Set([
 ]);
 // ==========================================
 // RASTREADOR INDETECTABLE (ANTI-CLOUDFLARE)
-// ==========================================
-
-// Buscar directamente en la API Open Source de Consumet (AnimeFLV)
-async function getDubsFromConsumet(query) {
-  try {
-    const res = await fetch(`https://api.consumet.org/anime/animeflv/${encodeURIComponent(query + ' latino')}`);
-    if (!res.ok) return [];
-    
-    const data = await res.json();
-    
-    // Devolvemos los títulos de los resultados que Consumet encontró
-    return data.results.map(anime => anime.title.toLowerCase());
-  } catch (e) {
-    return [];
-  }
-}
+// =========================================
 
 async function fetchHtmlDirecto(url) {
   try {
