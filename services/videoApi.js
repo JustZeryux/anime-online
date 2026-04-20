@@ -1,50 +1,35 @@
 import * as cheerio from 'cheerio';
 
-const headersBrowser = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Language': 'es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7',
-};
-
 // ==========================================
-// RASTREADOR INDETECTABLE (ANTI-CLOUDFLARE)
+// EL RASTREADOR "HYDRA" (ANTI-BLOQUEOS EN PRODUCCIÓN)
 // ==========================================
 async function fetchHtmlDirecto(url) {
-  try {
-    // INTENTO 1: Disfraz de Googlebot
-    // Engañamos a Cloudflare haciéndole creer que somos el motor de búsqueda de Google.
-    let res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Referer': 'https://www.google.com/',
-        'Accept': 'text/html'
-      },
-      signal: AbortSignal.timeout(5000)
-    });
+  // Rotación de Proxies: Si uno está bloqueado, saltamos al siguiente.
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+  ];
 
-    let text = await res.text();
-
-    // INTENTO 2: Si Cloudflare es agresivo y nos atrapa, usamos un Proxy Inverso
-    // AllOrigins raspará la página desde sus propios servidores y nos devolverá el texto puro.
-    if (text.includes('Just a moment...') || text.includes('Cloudflare') || text.includes('Ray ID') || !res.ok) {
-      console.warn("🛡️ Cloudflare detectado en intento directo. Activando Proxy AllOrigins...");
+  for (const proxy of proxies) {
+    try {
+      const res = await fetch(proxy, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
       
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-      const proxyRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
-      const proxyData = await proxyRes.json();
-      
-      text = proxyData.contents; // Aquí viene el HTML puro sin bloqueos
+      const text = await res.text();
+      // Verificamos que no nos hayan lanzado la pantalla de Cloudflare
+      if (!text.includes('Just a moment...') && !text.includes('Cloudflare') && text.includes('<html')) {
+        return text; // Infiltración exitosa
+      }
+    } catch (e) {
+      continue; // Falló el proxy, la Hidra ataca con la siguiente cabeza
     }
-
-    return text;
-  } catch (error) {
-    console.error("❌ Fallo total en rastreador:", error.message);
-    return null;
   }
+  return null; // Si todos fallan (muy raro)
 }
 
 // ==========================================
-// PLAN A: SCRAPER DE ANIMEFLV (Sub & Latino)
+// PLAN A: SCRAPER DE ANIMEFLV
 // ==========================================
 async function scrapeAnimeFLV(rutas, epNum) {
   let serversSub = [];
@@ -54,7 +39,8 @@ async function scrapeAnimeFLV(rutas, epNum) {
     if (!animePath) continue;
     
     const animeSlug = animePath.split('/').pop();
-    const videoPageUrl = `https://www3.animeflv.net/ver/${animeSlug}-${epNum}`;
+    // Usamos el dominio maestro sin www3 para evitar redirecciones muertas
+    const videoPageUrl = `https://animeflv.net/ver/${animeSlug}-${epNum}`;
     const videoHtml = await fetchHtmlDirecto(videoPageUrl);
     
     if (videoHtml) {
@@ -75,12 +61,8 @@ async function scrapeAnimeFLV(rutas, epNum) {
                   url: s.code.replace(/&amp;/g, '&'),
                   isIframe: true
                 }));
-                
-                if (animeSlug.includes('latino')) {
-                  serversLat = [...serversLat, ...mappedSub];
-                } else {
-                  serversSub = [...serversSub, ...mappedSub];
-                }
+                if (animeSlug.includes('latino')) serversLat = [...serversLat, ...mappedSub];
+                else serversSub = [...serversSub, ...mappedSub];
               }
 
               if (videoData.LAT) {
@@ -98,12 +80,11 @@ async function scrapeAnimeFLV(rutas, epNum) {
       });
     }
   }
-  
   return { subtitulado: serversSub, latino: serversLat };
 }
 
 // ==========================================
-// PLAN B: SCRAPER DE TIOANIME (Sub & Latino)
+// PLAN B: SCRAPER DE TIOANIME
 // ==========================================
 async function scrapeTioAnime(slugs, epNum) {
   let serversSub = [];
@@ -129,27 +110,22 @@ async function scrapeTioAnime(slugs, epNum) {
                 isIframe: true
               }));
 
-              if (slug.includes('latino')) {
-                serversLat = [...serversLat, ...mapped];
-              } else {
-                serversSub = [...serversSub, ...mapped];
-              }
+              if (slug.includes('latino')) serversLat = [...serversLat, ...mapped];
+              else serversSub = [...serversSub, ...mapped];
             } catch (e) {}
           }
         }
       });
     }
   }
-  
   return { subtitulado: serversSub, latino: serversLat };
 }
 
 // ==========================================
-// FUNCIÓN PRINCIPAL (EL CEREBRO)
+// CEREBRO PRINCIPAL
 // ==========================================
 export async function getEpisodeServers(episodeString) {
   const partes = episodeString.split('-episodio-');
-  // AQUÍ ESTÁ LA MAGIA: Limpiamos el ID clonado para que Jikan lo reconozca
   const jikanId = partes[0].replace('-lat', ''); 
   const epNum = partes[1];
 
@@ -161,9 +137,7 @@ export async function getEpisodeServers(episodeString) {
     const tituloOriginal = jikanData.data.title;
     const tituloEn = jikanData.data.title_english || tituloOriginal;
     
-    const limpiarTitulo = (titulo) => {
-      return titulo.replace(/:/g, ' ').replace(/-/g, ' ').replace(/\(TV\)/g, '').replace(/Season \d+/ig, '').replace(/Part \d+/ig, '').replace(/Cour \d+/ig, '').replace(/\s+/g, ' ').trim();
-    };
+    const limpiarTitulo = (titulo) => titulo.replace(/:/g, ' ').replace(/-/g, ' ').replace(/\(TV\)/g, '').replace(/Season \d+/ig, '').replace(/Part \d+/ig, '').replace(/Cour \d+/ig, '').replace(/\s+/g, ' ').trim();
 
     const tituloLimpio = limpiarTitulo(tituloOriginal);
     const tituloEnLimpio = limpiarTitulo(tituloEn);
@@ -171,46 +145,23 @@ export async function getEpisodeServers(episodeString) {
     const slugBase = tituloLimpio.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const slugEnBase = tituloEnLimpio.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-    // Inyectamos todas las variantes predictivas
     let possiblePaths = new Set([
       `/anime/${slugBase}`,
       `/anime/${slugBase}-latino`,
-      `/anime/${slugBase}-tv`,
-      `/anime/${slugBase}-tv-latino`,
-      `/anime/${slugBase}-audio-latino`,
       `/anime/${slugEnBase}`,
       `/anime/${slugEnBase}-latino`
     ]);
 
-    const buscarEnFLV = async (query) => {
-      if (!query) return [];
-      const htmlText = await fetchHtmlDirecto(`https://www3.animeflv.net/browse?q=${encodeURIComponent(query)}`);
-      if (!htmlText) return [];
-      const $ = cheerio.load(htmlText);
-      const links = [];
-      $('.ListAnimes li article a').each((i, el) => { if (i < 3) links.push($(el).attr('href')); });
-      return links;
-    };
-
-    const [linksOriginal, linksLimpio, linksLatino] = await Promise.all([
-      buscarEnFLV(tituloOriginal),
-      buscarEnFLV(tituloLimpio),
-      buscarEnFLV(`${tituloLimpio} Latino`)
-    ]);
-
-    linksOriginal.forEach(p => possiblePaths.add(p));
-    linksLimpio.forEach(p => possiblePaths.add(p));
-    linksLatino.forEach(p => possiblePaths.add(p));
-
     let resultadosFLV = await scrapeAnimeFLV(Array.from(possiblePaths), epNum);
 
     if (resultadosFLV.subtitulado.length > 0 || resultadosFLV.latino.length > 0) {
-      const uniqueSub = [...new Map(resultadosFLV.subtitulado.map(item => [item.url, item])).values()];
-      const uniqueLat = [...new Map(resultadosFLV.latino.map(item => [item.url, item])).values()];
-      return { subtitulado: uniqueSub, latino: uniqueLat };
+      return { 
+        subtitulado: [...new Map(resultadosFLV.subtitulado.map(item => [item.url, item])).values()], 
+        latino: [...new Map(resultadosFLV.latino.map(item => [item.url, item])).values()] 
+      };
     }
 
-    console.log("⚠️ FLV Falló. Activando Plan B: TioAnime Predictivo...");
+    console.log("⚠️ FLV Falló. Activando Plan B: TioAnime...");
     const tioSlugs = [slugBase, `${slugBase}-latino`, slugEnBase, `${slugEnBase}-latino`];
     const resultadosTio = await scrapeTioAnime(tioSlugs, epNum);
 
