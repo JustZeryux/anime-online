@@ -1,7 +1,8 @@
 import * as cheerio from 'cheerio';
+import { supabase } from '@/lib/supabase';
 
 // ==========================================
-// EL RASTREADOR "HYDRA" OPTIMIZADO
+// RASTREADOR HYDRA (EL QUE PELEA CON CLOUDFLARE)
 // ==========================================
 async function fetchHtmlDirecto(url) {
   const proxies = [
@@ -12,22 +13,16 @@ async function fetchHtmlDirecto(url) {
 
   for (const proxy of proxies) {
     try {
-      // Reduje el timeout a 4 segundos para que salte más rápido si un proxy está muerto
-      const res = await fetch(proxy, { signal: AbortSignal.timeout(4000) });
+      const res = await fetch(proxy, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) continue;
-      
       const text = await res.text();
-      if (!text.includes('Just a moment...') && !text.includes('Cloudflare') && text.includes('<html')) {
-        return text; 
-      }
-    } catch (e) {
-      continue; 
-    }
+      if (!text.includes('Just a moment...') && text.includes('<html')) return text;
+    } catch (e) { continue; }
   }
-  return null; 
+  return null;
 }
 
-// ... (Mantenemos tus funciones scrapeAnimeFLV y scrapeTioAnime exactamente igual aquí adentro)
+// ... (Funciones de scrapeAnimeFLV y scrapeTioAnime que ya tienes)
 async function scrapeAnimeFLV(rutas, epNum) {
   let serversSub = []; let serversLat = [];
   for (const animePath of rutas) {
@@ -45,12 +40,12 @@ async function scrapeAnimeFLV(rutas, epNum) {
             try {
               const videoData = JSON.parse(match[1]);
               if (videoData.SUB) {
-                const mappedSub = videoData.SUB.map((s, idx) => ({ id: `flv-sub-${idx}`, name: s.title || s.server.toUpperCase(), url: s.code.replace(/&amp;/g, '&'), isIframe: true }));
+                const mappedSub = videoData.SUB.map((s, idx) => ({ id: `flv-sub-${idx}-${Date.now()}`, name: s.title || s.server.toUpperCase(), url: s.code.replace(/&amp;/g, '&'), isIframe: true }));
                 if (animeSlug.includes('latino')) serversLat = [...serversLat, ...mappedSub];
                 else serversSub = [...serversSub, ...mappedSub];
               }
               if (videoData.LAT) {
-                const mappedLat = videoData.LAT.map((s, idx) => ({ id: `flv-lat-${idx}`, name: s.title || s.server.toUpperCase(), url: s.code.replace(/&amp;/g, '&'), isIframe: true }));
+                const mappedLat = videoData.LAT.map((s, idx) => ({ id: `flv-lat-${idx}-${Date.now()}`, name: s.title || s.server.toUpperCase(), url: s.code.replace(/&amp;/g, '&'), isIframe: true }));
                 serversLat = [...serversLat, ...mappedLat];
               }
             } catch (e) {}
@@ -76,7 +71,7 @@ async function scrapeTioAnime(slugs, epNum) {
           if (match) {
             try {
               const videoData = JSON.parse(match[1]);
-              const mapped = videoData.map((s, idx) => ({ id: `tio-${idx}`, name: s[0].toUpperCase(), url: s[1].replace(/&amp;/g, '&'), isIframe: true }));
+              const mapped = videoData.map((s, idx) => ({ id: `tio-${idx}-${Date.now()}`, name: s[0].toUpperCase(), url: s[1].replace(/&amp;/g, '&'), isIframe: true }));
               if (slug.includes('latino')) serversLat = [...serversLat, ...mapped];
               else serversSub = [...serversSub, ...mapped];
             } catch (e) {}
@@ -89,62 +84,55 @@ async function scrapeTioAnime(slugs, epNum) {
 }
 
 // ==========================================
-// EL CEREBRO OPTIMIZADO (CON CACHÉ)
+// EL CEREBRO DE LA BÓVEDA (LÓGICA SUPABASE)
 // ==========================================
-// Extraemos la lógica pesada a una función interna
-async function fetchServersLogic(jikanId, epNum) {
-  try {
-    const jikanRes = await fetch(`https://api.jikan.moe/v4/anime/${jikanId}`);
-    if (!jikanRes.ok) throw new Error("API Jikan Falló");
-    const jikanData = await jikanRes.json();
-    
-    const tituloOriginal = jikanData.data.title;
-    const tituloEn = jikanData.data.title_english || tituloOriginal;
-    
-    const limpiarTitulo = (titulo) => titulo.replace(/:/g, ' ').replace(/-/g, ' ').replace(/\(TV\)/g, '').replace(/Season \d+/ig, '').replace(/Part \d+/ig, '').replace(/Cour \d+/ig, '').replace(/\s+/g, ' ').trim();
-
-    const tituloLimpio = limpiarTitulo(tituloOriginal);
-    const tituloEnLimpio = limpiarTitulo(tituloEn);
-
-    const slugBase = tituloLimpio.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const slugEnBase = tituloEnLimpio.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
-    let possiblePaths = new Set([ `/anime/${slugBase}`, `/anime/${slugBase}-latino`, `/anime/${slugEnBase}`, `/anime/${slugEnBase}-latino` ]);
-
-    let resultadosFLV = await scrapeAnimeFLV(Array.from(possiblePaths), epNum);
-
-    if (resultadosFLV.subtitulado.length > 0 || resultadosFLV.latino.length > 0) {
-      return { 
-        subtitulado: [...new Map(resultadosFLV.subtitulado.map(item => [item.url, item])).values()], 
-        latino: [...new Map(resultadosFLV.latino.map(item => [item.url, item])).values()] 
-      };
-    }
-
-    const tioSlugs = [slugBase, `${slugBase}-latino`, slugEnBase, `${slugEnBase}-latino`];
-    const resultadosTio = await scrapeTioAnime(tioSlugs, epNum);
-
-    return { 
-      subtitulado: [...new Map(resultadosTio.subtitulado.map(item => [item.url, item])).values()], 
-      latino: [...new Map(resultadosTio.latino.map(item => [item.url, item])).values()] 
-    };
-  } catch (error) {
-    return { subtitulado: [], latino: [] };
-  }
-}
-
-// ⚡ ESTA ES LA FUNCIÓN QUE LLAMA TU PÁGINA
 export async function getEpisodeServers(episodeString) {
   const partes = episodeString.split('-episodio-');
   const jikanId = partes[0].replace('-lat', ''); 
   const epNum = partes[1];
 
-  // 🛡️ MAGIA DE NEXT.JS: Caching Manual
-  // Esto le dice a Next.js: "Si ya buscaste este episodio hoy, NO uses los proxies, dame el resultado guardado".
-  const cacheKey = `servers_${jikanId}_${epNum}`;
-  
-  // En producción, Next.js cacheará automáticamente el fetch interno, pero como aquí raspamos,
-  // la mejor forma de que sea ultra rápido es que tu componente 'page.jsx' utilice 'force-cache' o que
-  // el servidor lo mantenga en memoria.
-  
-  return await fetchServersLogic(jikanId, epNum);
+  try {
+    // 1. INTENTAR LEER DE LA BÓVEDA (VELOCIDAD NINJA)
+    const { data: boveda, error: bovedaError } = await supabase
+      .from('anime_servers')
+      .select('servers_json')
+      .eq('episode_id', episodeString)
+      .single();
+
+    if (boveda && boveda.servers_json) {
+      console.log("⚡ Servidores recuperados de la Bóveda en 0.1s");
+      return boveda.servers_json;
+    }
+
+    // 2. SI NO ESTÁ, SOLTAR A LA HIDRA (MODO LENTO)
+    console.log("🔍 Episodio no registrado. Raspando fuentes...");
+    
+    const jikanRes = await fetch(`https://api.jikan.moe/v4/anime/${jikanId}`);
+    const jikanData = await jikanRes.json();
+    const titulo = jikanData.data.title;
+    const slugBase = titulo.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+    const paths = new Set([`/anime/${slugBase}`, `/anime/${slugBase}-latino`]);
+    const flv = await scrapeAnimeFLV(Array.from(paths), epNum);
+    
+    let finalServers = flv;
+    if (flv.subtitulado.length === 0 && flv.latino.length === 0) {
+      const tio = await scrapeTioAnime([slugBase, `${slugBase}-latino`], epNum);
+      finalServers = tio;
+    }
+
+    // 3. GUARDAR EN LA BÓVEDA PARA EL PRÓXIMO USUARIO
+    if (finalServers.subtitulado.length > 0 || finalServers.latino.length > 0) {
+      await supabase.from('anime_servers').insert([{ 
+        episode_id: episodeString, 
+        servers_json: finalServers 
+      }]);
+      console.log("💾 Servidores guardados permanentemente.");
+    }
+
+    return finalServers;
+
+  } catch (e) {
+    return { subtitulado: [], latino: [] };
+  }
 }
