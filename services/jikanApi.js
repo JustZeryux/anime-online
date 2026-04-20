@@ -1,6 +1,6 @@
 // services/jikanApi.js
 import * as cheerio from 'cheerio';
-
+import { getDubsFromConsumet } from './consumetApi'; // <--- AGREGA ESTO AQUÍ
 const BASE_URL = 'https://api.jikan.moe/v4';
 
 // ==========================================
@@ -196,14 +196,17 @@ export async function searchAnime(query, page = 1, onlyLatino = false) {
       if (data.pagination?.has_next_page) hasNextPage = true;
     }
 
-    // 2. Intentamos raspar (si Cloudflare nos deja)
+// 2. Intentamos raspar (Scraping + Consumet)
     let allDubs = [];
     if (query) {
-      const [tioDubs, flvDubs] = await Promise.all([
+      // Lanzamos a nuestros 3 sabuesos al mismo tiempo
+      const [tioDubs, flvDubs, consumetDubs] = await Promise.all([
         checkDubsInTioAnime(cleanQuery),
-        checkDubsInFLV(cleanQuery)
+        checkDubsInFLV(cleanQuery),
+        getDubsFromConsumet(cleanQuery) // <--- ESTE ES EL NUEVO
       ]);
-      allDubs = [...tioDubs, ...flvDubs];
+      // Fusionamos todos los resultados que encontraron
+      allDubs = [...tioDubs, ...flvDubs, ...consumetDubs];
     }
     
     // 3. LA CLONACIÓN Y FILTRADO FINAL
