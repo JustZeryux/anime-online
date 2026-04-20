@@ -1,42 +1,47 @@
-import Link from 'next/link';
+// components/SearchBar.jsx
+'use client';
+import { useState } from 'react';
 
-export default function AnimeCard({ anime }) {
-  // Manejo de errores por si la API de Jikan devuelve un dato incompleto
-  const imageUrl = anime.images?.webp?.large_image_url || 'https://via.placeholder.com/225x318?text=Sin+Imagen';
-  
+export default function SearchBar({ onSearch }) {
+  const [query, setQuery] = useState('');
+  const [onlyLatino, setOnlyLatino] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSearch(query, onlyLatino); // Pasas ambos valores a tu page.jsx
+  };
+
   return (
-    <Link href={`/anime/${anime.mal_id}`} className="group cursor-pointer flex flex-col h-full">
-      <div className="relative overflow-hidden rounded-lg aspect-[3/4] shadow-md border border-gray-800">
-        <img 
-          src={imageUrl} 
-          alt={anime.title} 
-          className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
-          loading="lazy"
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-full max-w-2xl mx-auto">
+      <div className="relative flex items-center">
+        <input 
+          type="text" 
+          placeholder="Buscar anime (ej. Jujutsu Kaisen)..." 
+          className="w-full bg-[#1c1b22] border border-gray-700 text-white px-5 py-4 rounded-xl focus:outline-none focus:border-[#e2005e] shadow-lg text-lg"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
         />
-        
-        {/* Etiquetas de tipo o estado flotantes */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1">
-          {anime.year && (
-            <span className="bg-pink-600/90 text-white text-[10px] font-bold px-2 py-1 rounded shadow">
-              {anime.year}
-            </span>
-          )}
-          {anime.type && (
-            <span className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-1 rounded shadow uppercase">
-              {anime.type}
-            </span>
-          )}
-        </div>
-
-        {/* Gradiente oscuro en la parte inferior para que el texto resalte */}
-        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent pt-6 text-center opacity-0 group-hover:opacity-100 transition-opacity">
-           <span className="text-xs font-bold text-pink-400">Ver Detalles</span>
-        </div>
+        <button type="submit" className="absolute right-3 bg-[#e2005e] hover:bg-pink-600 p-2 rounded-lg transition-colors">
+          🔍
+        </button>
       </div>
-      
-      <h2 className="mt-2 text-sm font-medium line-clamp-2 group-hover:text-pink-500 transition-colors">
-        {anime.title}
-      </h2>
-    </Link>
+
+      {/* EL SWITCH ÉPICO */}
+      <label className="flex items-center gap-3 cursor-pointer self-end mr-2">
+        <div className="relative">
+          <input 
+            type="checkbox" 
+            className="sr-only" 
+            checked={onlyLatino} 
+            onChange={() => setOnlyLatino(!onlyLatino)} 
+          />
+          <div className={`block w-10 h-6 rounded-full transition-colors ${onlyLatino ? 'bg-[#e2005e]' : 'bg-gray-700'}`}></div>
+          <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${onlyLatino ? 'translate-x-4' : ''}`}></div>
+        </div>
+        <span className={`text-sm font-bold tracking-wider ${onlyLatino ? 'text-[#e2005e]' : 'text-gray-400'}`}>
+          SOLO AUDIO LATINO 🎙️
+        </span>
+      </label>
+    </form>
   );
 }
