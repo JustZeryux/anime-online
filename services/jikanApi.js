@@ -24,26 +24,39 @@ const KNOWN_LATINO_DUBS = new Set([
   42310, 52299, 52588, 52211, 52991, 53118, // Cyberpunk, Solo Leveling, Kaiju 8, Mashle, Frieren, Shangri-La
   34572, 6702, 23755, 11061, 22319, 1, 30 // Black Clover, Fairy Tail, NNT, HxH, Tokyo Ghoul, Bebop, Evangelion
 ]);
-
 // ==========================================
-// RASTREADORES SILENCIOSOS
+// RASTREADOR INDETECTABLE (ANTI-CLOUDFLARE)
 // ==========================================
 async function fetchHtmlDirecto(url) {
   try {
-    const res = await fetch(url, {
+    // INTENTO 1: Disfraz de Googlebot
+    // Engañamos a Cloudflare haciéndole creer que somos el motor de búsqueda de Google.
+    let res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Referer': 'https://www.google.com/',
         'Accept': 'text/html'
       },
-      // Timeout cortito para que la búsqueda no se quede "pensando" eternamente
-      signal: AbortSignal.timeout(3000) 
+      signal: AbortSignal.timeout(5000)
     });
-    if (!res.ok) return null;
-    const text = await res.text();
-    // Detectamos si Cloudflare nos bloqueó
-    if (text.includes('Just a moment...') || text.includes('Cloudflare')) return null;
+
+    let text = await res.text();
+
+    // INTENTO 2: Si Cloudflare es agresivo y nos atrapa, usamos un Proxy Inverso
+    // AllOrigins raspará la página desde sus propios servidores y nos devolverá el texto puro.
+    if (text.includes('Just a moment...') || text.includes('Cloudflare') || text.includes('Ray ID') || !res.ok) {
+      console.warn("🛡️ Cloudflare detectado en intento directo. Activando Proxy AllOrigins...");
+      
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const proxyRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
+      const proxyData = await proxyRes.json();
+      
+      text = proxyData.contents; // Aquí viene el HTML puro sin bloqueos
+    }
+
     return text;
-  } catch (e) {
+  } catch (error) {
+    console.error("❌ Fallo total en rastreador:", error.message);
     return null;
   }
 }
