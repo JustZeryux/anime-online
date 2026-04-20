@@ -26,6 +26,18 @@ export default function SearchBar({ onSearch }) {
         </button>
       </div>
 
+      {/* Dentro de tu contenedor de la imagen en AnimeCard */}
+{anime.hasDub && (
+  <div className="absolute top-2 left-2 z-20">
+    <span className="bg-gradient-to-r from-blue-600 to-blue-400 text-white text-[10px] font-black tracking-widest px-2 py-1 rounded-md shadow-[0_0_10px_rgba(37,99,235,0.8)] border border-blue-300/30 uppercase flex items-center gap-1">
+      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
+      </svg>
+      Latino
+    </span>
+  </div>
+)}
+
       {/* EL SWITCH ÉPICO */}
       <label className="flex items-center gap-3 cursor-pointer self-end mr-2">
         <div className="relative">
