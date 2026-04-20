@@ -9,7 +9,7 @@ const headersBrowser = {
 async function fetchHtmlDirecto(url) {
   try {
     const res = await fetch(url, { headers: headersBrowser, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null; // Ignorar si da 404 (URL incorrecta)
+    if (!res.ok) return null; 
     const text = await res.text();
     if (text.includes('Just a moment...') || text.includes('Cloudflare')) return null;
     return text;
@@ -25,7 +25,6 @@ async function scrapeAnimeFLV(rutas, epNum) {
   let serversSub = [];
   let serversLat = [];
 
-  // Recorremos todas las rutas posibles (las encontradas y las predichas)
   for (const animePath of rutas) {
     if (!animePath) continue;
     
@@ -44,7 +43,6 @@ async function scrapeAnimeFLV(rutas, epNum) {
             try {
               const videoData = JSON.parse(match[1]);
               
-              // 1. Extraer SUBTITULADO
               if (videoData.SUB) {
                 const mappedSub = videoData.SUB.map((s, idx) => ({
                   id: `flv-sub-${idx}-${Date.now()}`,
@@ -53,7 +51,6 @@ async function scrapeAnimeFLV(rutas, epNum) {
                   isIframe: true
                 }));
                 
-                // Si la URL predicha contenía la palabra "latino", entonces este "SUB" en realidad es el audio base latino
                 if (animeSlug.includes('latino')) {
                   serversLat = [...serversLat, ...mappedSub];
                 } else {
@@ -61,7 +58,6 @@ async function scrapeAnimeFLV(rutas, epNum) {
                 }
               }
 
-              // 2. Extraer LATINO (Cuando guardan ambos audios en la misma página)
               if (videoData.LAT) {
                 const mappedLat = videoData.LAT.map((s, idx) => ({
                   id: `flv-lat-${idx}-${Date.now()}`,
@@ -128,7 +124,8 @@ async function scrapeTioAnime(slugs, epNum) {
 // ==========================================
 export async function getEpisodeServers(episodeString) {
   const partes = episodeString.split('-episodio-');
-  const jikanId = partes[0];
+  // AQUÍ ESTÁ LA MAGIA: Limpiamos el ID clonado para que Jikan lo reconozca
+  const jikanId = partes[0].replace('-lat', ''); 
   const epNum = partes[1];
 
   try {
@@ -139,7 +136,6 @@ export async function getEpisodeServers(episodeString) {
     const tituloOriginal = jikanData.data.title;
     const tituloEn = jikanData.data.title_english || tituloOriginal;
     
-    // Limpiamos los títulos para la búsqueda clásica
     const limpiarTitulo = (titulo) => {
       return titulo.replace(/:/g, ' ').replace(/-/g, ' ').replace(/\(TV\)/g, '').replace(/Season \d+/ig, '').replace(/Part \d+/ig, '').replace(/Cour \d+/ig, '').replace(/\s+/g, ' ').trim();
     };
@@ -147,25 +143,20 @@ export async function getEpisodeServers(episodeString) {
     const tituloLimpio = limpiarTitulo(tituloOriginal);
     const tituloEnLimpio = limpiarTitulo(tituloEn);
 
-    // ==========================================
-    // MAGIA: PREVISIÓN DE SLUGS LATINOS Y SUB
-    // ==========================================
-    // Convertimos "Jujutsu Kaisen" -> "jujutsu-kaisen"
     const slugBase = tituloLimpio.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const slugEnBase = tituloEnLimpio.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-    // Inyectamos las URLs predictivas para no depender del buscador
+    // Inyectamos todas las variantes predictivas
     let possiblePaths = new Set([
       `/anime/${slugBase}`,
-      `/anime/${slugBase}-latino`,       // Muy común en AnimeFLV
+      `/anime/${slugBase}-latino`,
       `/anime/${slugBase}-tv`,
-      `/anime/${slugBase}-tv-latino`,    // Variante común
+      `/anime/${slugBase}-tv-latino`,
       `/anime/${slugBase}-audio-latino`,
       `/anime/${slugEnBase}`,
       `/anime/${slugEnBase}-latino`
     ]);
 
-    // Opcional: Ejecutamos una búsqueda de respaldo rápida por si el slug predictivo falla
     const buscarEnFLV = async (query) => {
       if (!query) return [];
       const htmlText = await fetchHtmlDirecto(`https://www3.animeflv.net/browse?q=${encodeURIComponent(query)}`);
@@ -186,20 +177,14 @@ export async function getEpisodeServers(episodeString) {
     linksLimpio.forEach(p => possiblePaths.add(p));
     linksLatino.forEach(p => possiblePaths.add(p));
 
-    // INTENTO 1: AnimeFLV con las rutas predichas y buscadas
     let resultadosFLV = await scrapeAnimeFLV(Array.from(possiblePaths), epNum);
 
-    // Si encontramos al menos 1 servidor (sea Sub o Lat), lo retornamos y evitamos sobrecargar
     if (resultadosFLV.subtitulado.length > 0 || resultadosFLV.latino.length > 0) {
-      
-      // Eliminar duplicados si los hay
       const uniqueSub = [...new Map(resultadosFLV.subtitulado.map(item => [item.url, item])).values()];
       const uniqueLat = [...new Map(resultadosFLV.latino.map(item => [item.url, item])).values()];
-      
       return { subtitulado: uniqueSub, latino: uniqueLat };
     }
 
-    // INTENTO 2: TioAnime predictivo
     console.log("⚠️ FLV Falló. Activando Plan B: TioAnime Predictivo...");
     const tioSlugs = [slugBase, `${slugBase}-latino`, slugEnBase, `${slugEnBase}-latino`];
     const resultadosTio = await scrapeTioAnime(tioSlugs, epNum);
