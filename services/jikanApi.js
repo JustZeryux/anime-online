@@ -1,50 +1,123 @@
-// services/jikanApi.js
+import * as cheerio from 'cheerio';
+
 const BASE_URL = 'https://api.jikan.moe/v4';
 
-// Obtener los animes en emisión (Top Airing)
+// ==========================================
+// RASTREADORES SILENCIOSOS DE DOBLAJES
+// ==========================================
+async function fetchHtmlDirecto(url) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html'
+      },
+      signal: AbortSignal.timeout(4000) // Timeout rápido para no trabar la búsqueda
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch (e) {
+    return null;
+  }
+}
+
+// Revisa en TioAnime si existe el doblaje
+async function checkDubsInTioAnime(query) {
+  const html = await fetchHtmlDirecto(`https://tioanime.com/directorio?q=${encodeURIComponent(query)}`);
+  if (!html) return [];
+  const $ = cheerio.load(html);
+  const dubs = [];
+  $('.animes article.anime h3.title').each((i, el) => {
+    const title = $(el).text().toLowerCase();
+    if (title.includes('latino')) {
+      dubs.push(title.replace(/\(audio latino\)|latino/gi, '').trim());
+    }
+  });
+  return dubs;
+}
+
+// Revisa en AnimeFLV si existe el doblaje
+async function checkDubsInFLV(query) {
+  const html = await fetchHtmlDirecto(`https://www3.animeflv.net/browse?q=${encodeURIComponent(query + ' Latino')}`);
+  if (!html) return [];
+  const $ = cheerio.load(html);
+  const dubs = [];
+  $('.ListAnimes li article h3.Title').each((i, el) => {
+    const title = $(el).text().toLowerCase();
+    if (title.includes('latino') || title.includes('doblaje')) {
+      dubs.push(title.replace(/\(audio latino\)|latino|doblaje/gi, '').trim());
+    }
+  });
+  return dubs;
+}
+
+// ==========================================
+// FUNCIONES NATIVAS DE JIKAN BLINDADAS
+// ==========================================
 export async function getAiringAnimes() {
   try {
-    // Usamos caché con revalidación: Solo actualizará la lista 1 vez por hora (3600 segundos).
-    // Filtramos explícitamente SFW y excluimos Hentai(12) y Erotica(49)
     const res = await fetch(`${BASE_URL}/top/anime?filter=airing&limit=24&sfw=true&genres_exclude=12,49`, { 
       next: { revalidate: 3600 } 
     });
-    
-    if (!res.ok) {
-      console.warn(`La API de Jikan está saturada (Status: ${res.status}). Mostrando lista vacía.`);
-      return []; 
-    }
-    
+    if (!res.ok) return [];
     const data = await res.json();
     return data.data || [];
-    
   } catch (error) {
-    console.error('Fallo al conectar con Jikan API:', error);
     return []; 
   }
 }
 
-// Obtener detalles de un anime por su ID (BLINDADO)
+export async function getPopularAnimes() {
+  try {
+    const res = await fetch(`${BASE_URL}/top/anime?filter=bypopularity&limit=12&sfw=true&genres_exclude=12,49`, { 
+      next: { revalidate: 3600 } 
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data || [];
+  } catch (error) {
+    return []; 
+  }
+}
+
+export async function getUpcomingAnimes() {
+  try {
+    const res = await fetch(`${BASE_URL}/seasons/upcoming?limit=12&sfw=true&genres_exclude=12,49`, { 
+      next: { revalidate: 3600 } 
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data || [];
+  } catch (error) {
+    return [];
+  }
+}
+
+// Limpiamos el "-lat" para que Jikan no colapse al pedir detalles
 export async function getAnimeDetails(id) {
   try {
-    const res = await fetch(`${BASE_URL}/anime/${id}/full`);
+    const realId = id.toString().replace('-lat', '');
+    const res = await fetch(`${BASE_URL}/anime/${realId}/full`);
     if (!res.ok) return null;
     
     const data = await res.json();
+    
+    // Si la tarjeta era la del doblaje, mantenemos el título visual
+    if (id.toString().includes('-lat')) {
+      data.data.title = `${data.data.title} (Audio Latino)`;
+      if (data.data.title_english) data.data.title_english += ' (Latino)';
+    }
+
     return data.data;
   } catch (error) {
-    console.error("Fallo de conexión al buscar detalles del anime:", error.message);
     return null; 
   }
 }
 
-// ==========================================
-// EPISODIOS MEJORADOS (Intenta traer los títulos reales)
-// ==========================================
 export async function getAnimeEpisodes(id) {
   try {
-    // 1. Intentamos pedir la lista REAL de episodios a Jikan
-    const res = await fetch(`${BASE_URL}/anime/${id}/episodes`);
+    const realId = id.toString().replace('-lat', '');
+    const res = await fetch(`${BASE_URL}/anime/${realId}/episodes`);
     
     if (res.ok) {
       const data = await res.json();
@@ -56,9 +129,8 @@ export async function getAnimeEpisodes(id) {
       }
     }
 
-    // 2. FALLBACK: Si no hay lista de episodios
-    const resDetail = await fetch(`${BASE_URL}/anime/${id}`);
-    if (!resDetail.ok) throw new Error("No se pudo obtener detalle para episodios");
+    const resDetail = await fetch(`${BASE_URL}/anime/${realId}`);
+    if (!resDetail.ok) throw new Error("Fallo fallback episodios");
     
     const dataDetail = await resDetail.json();
     const totalEpisodios = dataDetail.data?.episodes;
@@ -71,22 +143,20 @@ export async function getAnimeEpisodes(id) {
     }
 
     return [{ mal_id: 1, title: "Película / OVA / Emisión" }];
-
   } catch (error) {
-    console.error("❌ Error cargando episodios:", error.message);
     return [{ mal_id: 1, title: "Episodio 1" }];
   }
 }
 
 // ==========================================
-// BÚSQUEDA BLINDADA (Soporta espacios, SFW Estricto y ordena mejor)
+// EL CEREBRO DE BÚSQUEDA (HÍBRIDO Y CLONADOR)
 // ==========================================
 export async function searchAnime(query, page = 1) {
   try {
     const cleanQuery = encodeURIComponent(query);
     
-    // Solo hacemos la búsqueda normal con los filtros estrictos activados
-    const resNormal = await fetch(`${BASE_URL}/anime?q=${cleanQuery}&limit=24&order_by=popularity&page=${page}&sfw=true&genres_exclude=12,49`).catch(() => null);
+    // 1. Buscamos en Jikan la base oficial
+    const resNormal = await fetch(`${BASE_URL}/anime?q=${cleanQuery}&limit=20&order_by=popularity&page=${page}&sfw=true&genres_exclude=12,49`).catch(() => null);
     
     let results = [];
     let hasNextPage = false;
@@ -97,39 +167,50 @@ export async function searchAnime(query, page = 1) {
       if (data.pagination?.has_next_page) hasNextPage = true;
     }
 
-    // Reordenamos para que los resultados más relevantes queden hasta arriba
-    results.sort((a, b) => (a.popularity || 99999) - (b.popularity || 99999));
+    // 2. Buscamos paralelamente en los scrapers latinos
+    const [tioDubs, flvDubs] = await Promise.all([
+      checkDubsInTioAnime(query),
+      checkDubsInFLV(query)
+    ]);
+    const allDubs = [...tioDubs, ...flvDubs];
+    
+    // 3. LA CLONACIÓN
+    const finalResults = [];
+
+    results.forEach(anime => {
+      // Agregamos siempre la versión normal
+      finalResults.push(anime);
+
+      const titleEn = (anime.title_english || '').toLowerCase();
+      const titleJp = (anime.title || '').toLowerCase();
+      
+      // Chequeamos si nuestros scrapers encontraron un match
+      const isDubbed = allDubs.some(dubTitle => 
+        titleEn.includes(dubTitle) || titleJp.includes(dubTitle) || dubTitle.includes(titleJp)
+      );
+
+      // Si hay match (o si el usuario fue explícito), clonamos la tarjeta
+      if (isDubbed || query.toLowerCase().includes('latino')) {
+        const latinoClone = { ...anime };
+        latinoClone.mal_id = `${anime.mal_id}-lat`; // La magia que permite diferenciar la tarjeta
+        latinoClone.title = `${anime.title} (Audio Latino)`;
+        if (latinoClone.title_english) {
+          latinoClone.title_english = `${anime.title_english} (Latino)`;
+        }
+        
+        finalResults.push(latinoClone);
+      }
+    });
+
+    // Reordenamos para dejar lo más popular arriba
+    finalResults.sort((a, b) => (a.popularity || 99999) - (b.popularity || 99999));
 
     return {
-      results: results,
+      results: finalResults,
       hasNextPage: hasNextPage
     };
   } catch (error) {
-    console.error("Error en búsqueda:", error);
+    console.error("Error en búsqueda híbrida:", error);
     return { results: [], hasNextPage: false };
-  }
-}
-
-export async function getPopularAnimes() {
-  try {
-    const res = await fetch(`${BASE_URL}/top/anime?filter=bypopularity&limit=12&sfw=true&genres_exclude=12,49`, { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.data || [];
-  } catch (error) {
-    console.error("Fallo de red al obtener Populares:", error.message);
-    return []; 
-  }
-}
-
-export async function getUpcomingAnimes() {
-  try {
-    const res = await fetch(`${BASE_URL}/seasons/upcoming?limit=12&sfw=true&genres_exclude=12,49`, { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.data || [];
-  } catch (error) {
-    console.error("Fallo de red al obtener Próximos:", error.message);
-    return [];
   }
 }
