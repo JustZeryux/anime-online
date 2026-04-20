@@ -6,14 +6,39 @@ const headersBrowser = {
   'Accept-Language': 'es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7',
 };
 
+// ==========================================
+// RASTREADOR INDETECTABLE (ANTI-CLOUDFLARE)
+// ==========================================
 async function fetchHtmlDirecto(url) {
   try {
-    const res = await fetch(url, { headers: headersBrowser, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null; 
-    const text = await res.text();
-    if (text.includes('Just a moment...') || text.includes('Cloudflare')) return null;
+    // INTENTO 1: Disfraz de Googlebot
+    // Engañamos a Cloudflare haciéndole creer que somos el motor de búsqueda de Google.
+    let res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Referer': 'https://www.google.com/',
+        'Accept': 'text/html'
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+
+    let text = await res.text();
+
+    // INTENTO 2: Si Cloudflare es agresivo y nos atrapa, usamos un Proxy Inverso
+    // AllOrigins raspará la página desde sus propios servidores y nos devolverá el texto puro.
+    if (text.includes('Just a moment...') || text.includes('Cloudflare') || text.includes('Ray ID') || !res.ok) {
+      console.warn("🛡️ Cloudflare detectado en intento directo. Activando Proxy AllOrigins...");
+      
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const proxyRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
+      const proxyData = await proxyRes.json();
+      
+      text = proxyData.contents; // Aquí viene el HTML puro sin bloqueos
+    }
+
     return text;
-  } catch (e) {
+  } catch (error) {
+    console.error("❌ Fallo total en rastreador:", error.message);
     return null;
   }
 }
