@@ -1,3 +1,4 @@
+// services/videoApi.js
 import * as cheerio from 'cheerio';
 
 const headersBrowser = {
@@ -18,9 +19,12 @@ async function fetchHtmlDirecto(url) {
 }
 
 // ==========================================
-// PLAN A: SCRAPER DE ANIMEFLV
+// PLAN A: SCRAPER DE ANIMEFLV (Soporte Sub y Latino)
 // ==========================================
 async function scrapeAnimeFLV(rutas, epNum) {
+  let serversSub = [];
+  let serversLat = [];
+
   for (const animePath of rutas) {
     if (!animePath) continue;
     const animeSlug = animePath.split('/').pop();
@@ -29,7 +33,7 @@ async function scrapeAnimeFLV(rutas, epNum) {
     
     if (videoHtml) {
       const $v = cheerio.load(videoHtml);
-      let serversFound = [];
+      
       $v('script').each((_, script) => {
         const content = $v(script).html();
         if (content && content.includes('var videos = {')) {
@@ -37,22 +41,41 @@ async function scrapeAnimeFLV(rutas, epNum) {
           if (match) {
             try {
               const videoData = JSON.parse(match[1]);
+              
+              // Extraer servidores Subtitulados
               if (videoData.SUB) {
-                serversFound = videoData.SUB.map((s, idx) => ({
-                  id: `flv-${idx}-${Date.now()}`,
+                const mappedSub = videoData.SUB.map((s, idx) => ({
+                  id: `flv-sub-${idx}-${Date.now()}`,
                   name: s.title || s.server.toUpperCase(),
                   url: s.code.replace(/&amp;/g, '&'),
                   isIframe: true
                 }));
+                // Si la ruta en sí dice latino, lo asignamos a lat
+                if (animeSlug.includes('latino')) {
+                  serversLat = [...serversLat, ...mappedSub];
+                } else {
+                  serversSub = [...serversSub, ...mappedSub];
+                }
+              }
+
+              // Extraer servidores Latino (si existen en la misma página)
+              if (videoData.LAT) {
+                const mappedLat = videoData.LAT.map((s, idx) => ({
+                  id: `flv-lat-${idx}-${Date.now()}`,
+                  name: s.title || s.server.toUpperCase(),
+                  url: s.code.replace(/&amp;/g, '&'),
+                  isIframe: true
+                }));
+                serversLat = [...serversLat, ...mappedLat];
               }
             } catch (e) {}
           }
         }
       });
-      if (serversFound.length > 0) return serversFound;
     }
   }
-  return [];
+  
+  return { subtitulado: serversSub, latino: serversLat };
 }
 
 // ==========================================
@@ -65,7 +88,7 @@ async function scrapeTioAnime(titulo, epNum) {
     if (!html) return [];
 
     const $ = cheerio.load(html);
-    const animeHref = $('.animes article.anime a').first().attr('href'); // /anime/jujutsu-kaisen
+    const animeHref = $('.animes article.anime a').first().attr('href');
     if (!animeHref) return [];
 
     const slug = animeHref.split('/').pop();
@@ -81,7 +104,6 @@ async function scrapeTioAnime(titulo, epNum) {
           const match = content.match(/var episodes = (\[.*?\]);/);
           if (match) {
             try {
-              // TioAnime usa un formato de array de arrays: [["Fembed","url"],["Mega","url"]]
               const videoData = JSON.parse(match[1]);
               serversFound = videoData.map((s, idx) => ({
                 id: `tio-${idx}-${Date.now()}`,
@@ -136,23 +158,32 @@ export async function getEpisodeServers(episodeString) {
     };
 
     let possiblePaths = new Set();
+    
+    // Buscamos títulos normales
     (await buscarEnFLV(tituloOriginal)).forEach(p => possiblePaths.add(p));
     (await buscarEnFLV(tituloLimpio)).forEach(p => possiblePaths.add(p));
     if (tituloEnLimpio !== tituloLimpio) {
       (await buscarEnFLV(tituloEnLimpio)).forEach(p => possiblePaths.add(p));
     }
+    
+    // Buscamos específicamente versiones con Audio Latino
+    (await buscarEnFLV(`${tituloLimpio} Latino`)).forEach(p => possiblePaths.add(p));
 
     // INTENTO 1: Ejecutamos el Plan A (AnimeFLV)
-    let servidores = await scrapeAnimeFLV(Array.from(possiblePaths), epNum);
+    let resultadosFLV = await scrapeAnimeFLV(Array.from(possiblePaths), epNum);
 
-    // INTENTO 2: Si FLV falla o no encuentra el anime, ejecutamos el Plan B (TioAnime)
-    if (servidores.length === 0) {
+    // INTENTO 2: Si FLV falla o no encuentra servidores SUB, ejecutamos el Plan B (TioAnime)
+    if (resultadosFLV.subtitulado.length === 0 && resultadosFLV.latino.length === 0) {
       console.log("⚠️ FLV Falló o no encontró servidores. Activando Plan B: TioAnime...");
-      servidores = await scrapeTioAnime(tituloLimpio, epNum);
+      const tioServers = await scrapeTioAnime(tituloLimpio, epNum);
+      return { subtitulado: tioServers, latino: [] };
     }
 
-    // Retornamos lo que hayamos encontrado (Si ambos fallan, devolverá vacío)
-    return { subtitulado: servidores, latino: [] };
+    // Eliminamos duplicados basados en la URL antes de devolver
+    const uniqueSub = [...new Map(resultadosFLV.subtitulado.map(item => [item.url, item])).values()];
+    const uniqueLat = [...new Map(resultadosFLV.latino.map(item => [item.url, item])).values()];
+
+    return { subtitulado: uniqueSub, latino: uniqueLat };
 
   } catch (error) {
     console.error("⚠️ Error Crítico en getEpisodeServers:", error.message);
