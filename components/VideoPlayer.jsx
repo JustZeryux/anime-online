@@ -4,17 +4,30 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 // Diccionario para limpiar los nombres de los servidores y asignarles una "calidad" visual
-const getServerInfo = (id) => {
+// Diccionario para limpiar los nombres y detectar Saidochesto
+const getServerInfo = (server) => {
+  const id = server?.id?.toLowerCase();
+  const url = server?.url?.toLowerCase() || '';
+
+  // Detección especial por URL (Para Saidochesto y derivados)
+  if (url.includes('saidochesto')) {
+    return { name: 'Servidor Alfa 👑', quality: '1080p Premium', color: 'text-purple-400' };
+  }
+  if (url.includes('fembed') || url.includes('embedsito')) {
+    return { name: 'F-Embed', quality: 'HD 720p', color: 'text-blue-400' };
+  }
+
+  // Detección clásica por ID
   const servers = {
-    flv: { name: 'Servidor Alfa', quality: 'HD 1080p', color: 'text-green-400' },
+    flv: { name: 'Servidor FLV', quality: 'HD 1080p', color: 'text-green-400' },
     sbfull: { name: 'Servidor Beta', quality: 'HD 720p', color: 'text-yellow-400' },
-    mega: { name: 'Mega Premium', quality: 'Full HD', color: 'text-green-400' },
-    okru: { name: 'OkRu HD', quality: 'HD 1080p', color: 'text-green-400' },
-    fembed: { name: 'F-Embed', quality: 'SD 480p', color: 'text-orange-400' },
-    stape: { name: 'StreamTape', quality: 'HD 720p', color: 'text-yellow-400' }
+    mega: { name: 'Mega Premium', quality: 'Full HD', color: 'text-red-500' },
+    okru: { name: 'OkRu HD', quality: 'HD 1080p', color: 'text-blue-500' },
+    stape: { name: 'StreamTape', quality: 'HD 720p', color: 'text-orange-400' },
+    tio: { name: 'Servidor Tio', quality: 'HD 1080p', color: 'text-blue-400' }
   };
-  const key = id?.toLowerCase();
-  return servers[key] || { name: `Servidor ${id?.toUpperCase()}`, quality: 'Auto', color: 'text-green-400' };
+  
+  return servers[id] || { name: `Servidor ${id?.toUpperCase()}`, quality: 'Auto', color: 'text-green-400' };
 };
 
 export default function VideoPlayer({ servers, jikanId, nextEp, coverImage }) {
